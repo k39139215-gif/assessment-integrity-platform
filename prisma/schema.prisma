@@ -1,0 +1,30 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model AssessmentSession {
+  id        String   @id @default(uuid())
+  studentId String
+  courseId  String?
+  startedAt DateTime @default(now())
+  
+  events    TelemetryEvent[]
+}
+
+model TelemetryEvent {
+  id                  String   @id @default(uuid())
+  assessmentSessionId String
+  timestamp           DateTime @default(now())
+  clientTimestamp     String
+  eventType           String
+  
+  // JSON metadata (e.g., characters typed, lines pasted, velocity, etc.)
+  metadata            String?  // Storing as string since SQLite JSON support varies in simple Prisma setup
+  
+  session AssessmentSession @relation(fields: [assessmentSessionId], references: [id])
+}

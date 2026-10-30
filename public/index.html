@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Code Integrity Prototype - Backend Connected</title>
+<style>
+body{margin:0;background:#0f1117;color:#e8eaf0;font-family:Arial,sans-serif}
+header{padding:16px 22px;border-bottom:1px solid #292e3a;display:flex;justify-content:space-between}
+h1{font-size:19px;margin:0}.badge{color:#8ee6a5;font-weight:700}
+main{display:grid;grid-template-columns:minmax(0,1fr) 430px;min-height:calc(100vh - 60px)}
+.editor{padding:20px}
+textarea{
+  width:100%;height:620px;background:#151923;color:#eee;
+  border:1px solid #303644;border-radius:10px;padding:16px;
+  font:14px/1.6 Consolas,monospace;resize:vertical;outline:none;
+  box-sizing: border-box;
+}
+textarea:focus{border-color:#6875f5}
+.side{
+  padding:18px;background:#12151d;border-left:1px solid #292e3a;
+  overflow:auto
+}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{
+  background:#171b24;border:1px solid #2b303c;
+  border-radius:10px;padding:13px;margin-bottom:10px
+}
+.label{font-size:11px;color:#9da5b5;text-transform:uppercase}
+.value{font-size:22px;font-weight:800;margin-top:5px}
+.small{font-size:12px;color:#9da5b5;line-height:1.45}
+.bar{
+  height:7px;background:#292e3a;border-radius:9px;
+  overflow:hidden;margin-top:8px
+}
+.fill{height:100%;background:#7c83ff;transition: width 0.3s ease;}
+button{
+  border:0;border-radius:8px;padding:9px 12px;
+  background:#6875f5;color:white;font-weight:700;
+  cursor:pointer;margin-right:6px;margin-bottom:8px
+}
+button.secondary{background:#2a303c}
+.log{
+  max-height:330px;overflow:auto;
+  font:11px/1.45 Consolas,monospace
+}
+.event{
+  padding:7px 0;
+  border-bottom:1px solid #252a35
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:11px
+}
+th,td{
+  text-align:left;
+  padding:6px 4px;
+  border-bottom:1px solid #292e3a;
+  vertical-align:top
+}
+th{color:#9da5b5}
+
+/* Secure Practice Modes */
+#overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-size: 24px;
+  text-align: center;
+  flex-direction: column;
+}
+#overlay button {
+  margin-top: 20px;
+  font-size: 18px;
+  padding: 12px 24px;
+}
+.mode-blur { filter: blur(10px); }
+.overlay-white { background: rgba(255,255,255,0.95); color: #333 !important; }
+.overlay-black { background: rgba(0,0,0,0.95); }
+
+/* Moiré Pattern for Anti-Photography */
+.editor-container { position: relative; }
+.moire-pattern {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  background-image: 
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.7) 0px,
+      rgba(255, 255, 255, 0.7) 2px,
+      transparent 2px,
+      transparent 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.7) 0px,
+      rgba(255, 255, 255, 0.7) 2px,
+      transparent 2px,
+      transparent 4px
+    );
+  z-index: 10;
+  border-radius: 10px;
+  animation: scanline 0.016s infinite alternate; /* Ultra fast 60hz flicker */
+  display: none; 
+  mix-blend-mode: difference; /* Inverts text colors aggressively under the grid */
+}
+
+@keyframes scanline {
+  0% { transform: translateY(0); opacity: 0.6; }
+  50% { transform: translateY(2px); opacity: 1; }
+  100% { transform: translateY(-1px); opacity: 0.8; }
+}
+
+@keyframes text-flicker {
+  0% { color: #eee; text-shadow: none; }
+  50% { color: #888; text-shadow: 0 0 2px rgba(255,255,255,0.8); }
+  100% { color: #eee; text-shadow: none; }
+}
+
+@media(max-width:1000px){
+  main{grid-template-columns:1fr}
+  .side{
+    border-left:0;
+    border-top:1px solid #292e3a
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div id="overlay">
+  <div>Content Hidden</div>
+  <div style="font-size: 14px; margin-top: 10px;">You navigated away from the assessment.</div>
+  <button onclick="returnToAssessment()">Return to assessment</button>
+</div>
+
+<div id="app-content">
+<header>
+  <h1>Code Integrity Prototype (Backend Connected)</h1>
+  <div class="badge">NO TIME LIMIT</div>
+</header>
+
+<main>
+
+<section class="editor">
+
+  <h2>Practice / Debugging Exercise</h2>
+
+  <p class="small">
+    Events are sent to the backend. Risk score is computed on the server.
+  </p>
+
+  <div style="margin-bottom: 10px;">
+    <label class="small" style="margin-right: 10px;">Secure Practice View:</label>
+    <select id="mode-select" style="background:#2a303c; color:white; border:none; padding:5px; border-radius:5px;">
+      <option value="NONE">Normal (No overlay)</option>
+      <option value="MOIRE">Anti-Photo (Moiré Pattern)</option>
+      <option value="BLUR">Protected (Blur on focus loss)</option>
+      <option value="WHITE_OVERLAY">Exam (White on focus loss)</option>
+      <option value="BLACK_OVERLAY">Exam (Black on focus loss)</option>
+    </select>
+  </div>
+
+  <button id="run">Run Code</button>
+  <button id="submit">Submit</button>
+  <button id="reset" class="secondary">Reset</button>
+
+  <div class="editor-container">
+    <textarea
+      id="code"
+      spellcheck="false"
+      placeholder="// Start typing your code here..."
+    ></textarea>
+    <div id="moire-overlay" class="moire-pattern"></div>
+  </div>
+
+</section>
+
+<aside class="side">
+
+  <div class="grid">
+    <div class="card">
+      <div class="label">Typed chars</div>
+      <div class="value" id="typed">0</div>
+    </div>
+    <div class="card">
+      <div class="label">Pasted chars</div>
+      <div class="value" id="pasted">0</div>
+    </div>
+    <div class="card">
+      <div class="label">Paste events</div>
+      <div class="value" id="pevents">0</div>
+    </div>
+    <div class="card">
+      <div class="label">Focus losses</div>
+      <div class="value" id="focus">0</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Server Behavioral risk</div>
+    <div class="value" id="risk">Low</div>
+    <div class="small" id="reason">Loading...</div>
+    <div class="bar">
+      <div class="fill" id="riskbar"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">Latest activity</div>
+    <div class="small" id="latest">Waiting...</div>
+  </div>
+
+  <div class="card">
+    <div class="label">Event table</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Event</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody id="table"></tbody>
+    </table>
+  </div>
+
+</aside>
+
+</main>
+</div>
+
+<script>
+const code = document.getElementById("code");
+const overlay = document.getElementById("overlay");
+const appContent = document.getElementById("app-content");
+const modeSelect = document.getElementById("mode-select");
+
+// Generate fake IDs for this session
+const assessmentId = 'test-assessment-' + Math.floor(Math.random() * 1000);
+const studentId = 'student-' + Math.floor(Math.random() * 1000);
+
+const S = {
+  lastLen: 0,
+  lastPaste: false,
+  eventBuffer: []
+};
+
+function time() {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function add(type, detailsObj, displayMsg) {
+  const e = {
+    time: time(),
+    iso: new Date().toISOString(),
+    type: type,
+    details: detailsObj
+  };
+
+  S.eventBuffer.push(e);
+
+  document.getElementById("latest").textContent = e.time + " — " + type + ": " + displayMsg;
+
+  const tr = document.createElement("tr");
+  tr.innerHTML = "<td>" + e.time + "</td>" + "<td>" + type + "</td>" + "<td>" + displayMsg + "</td>";
+  document.getElementById("table").prepend(tr);
+}
+
+// Flush events to backend
+async function flushEvents() {
+  if (S.eventBuffer.length === 0) return;
+
+  const eventsToSend = [...S.eventBuffer];
+  S.eventBuffer = []; // clear buffer
+
+  try {
+    await fetch(`/api/assessments/${assessmentId}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, events: eventsToSend })
+    });
+    // After flush, fetch updated score
+    fetchIntegrityScore();
+  } catch (err) {
+    console.error("Failed to flush events, putting back in buffer", err);
+    S.eventBuffer = [...eventsToSend, ...S.eventBuffer];
+  }
+}
+
+// Fetch risk score from backend
+async function fetchIntegrityScore() {
+  try {
+    const res = await fetch(`/api/assessments/${assessmentId}/integrity`);
+    const data = await res.json();
+
+    document.getElementById("typed").textContent = data.summary.typedChars.toLocaleString();
+    document.getElementById("pasted").textContent = data.summary.pastedChars.toLocaleString();
+    document.getElementById("pevents").textContent = data.summary.pasteEvents.toLocaleString();
+    document.getElementById("focus").textContent = data.summary.focusLosses.toLocaleString();
+
+    document.getElementById("riskbar").style.width = data.score + "%";
+    
+    const riskEl = document.getElementById("risk");
+    riskEl.textContent = data.riskLevel;
+    
+    if (data.riskLevel === 'High') riskEl.style.color = '#ff6b6b';
+    else if (data.riskLevel === 'Medium') riskEl.style.color = '#feca57';
+    else riskEl.style.color = '#8ee6a5';
+
+    document.getElementById("reason").textContent = data.reasons.join(" • ");
+  } catch (err) {
+    console.error("Failed to fetch integrity score", err);
+  }
+}
+
+// Flush every 3 seconds
+setInterval(flushEvents, 3000);
+
+code.addEventListener("paste", e => {
+  const text = e.clipboardData?.getData("text") || "";
+  const lines = text ? text.split(/\r\n|\r|\n/).length : 0;
+  S.lastPaste = true;
+
+  add("PASTE", { length: text.length, lines }, `${text.length} chars, ${lines} lines`);
+
+  if (text.length >= 500) {
+    add("LARGE_PASTE", { length: text.length }, `${text.length} chars inserted`);
+  }
+  
+  // force immediate flush on big events
+  setTimeout(flushEvents, 100);
+});
+
+code.addEventListener("input", () => {
+  const len = code.value.length;
+  const delta = Math.max(0, len - S.lastLen);
+  S.lastLen = len;
+
+  if (S.lastPaste) {
+    S.lastPaste = false;
+  } else if (delta > 0) {
+    add("TYPE", { delta }, `${delta} char(s) typed`);
+  }
+});
+
+// Secure Practice View overlay logic
+modeSelect.addEventListener('change', () => {
+  const mode = modeSelect.value;
+  if (mode === 'MOIRE') {
+    document.getElementById('moire-overlay').style.display = 'block';
+    code.style.animation = 'text-flicker 0.02s infinite';
+  } else {
+    document.getElementById('moire-overlay').style.display = 'none';
+    code.style.animation = 'none';
+  }
+});
+
+function applyOverlay() {
+  const mode = modeSelect.value;
+  if (mode === 'NONE' || mode === 'MOIRE') return;
+  
+  overlay.style.display = 'flex';
+  overlay.className = ''; // reset
+  appContent.className = ''; // reset
+  
+  if (mode === 'BLUR') {
+    appContent.classList.add('mode-blur');
+    overlay.style.background = 'transparent';
+  } else if (mode === 'WHITE_OVERLAY') {
+    overlay.classList.add('overlay-white');
+  } else if (mode === 'BLACK_OVERLAY') {
+    overlay.classList.add('overlay-black');
+  }
+}
+
+window.returnToAssessment = function() {
+  overlay.style.display = 'none';
+  appContent.className = '';
+  add("FOCUS_RETURNED", {}, "Page became visible/focus returned");
+  setTimeout(flushEvents, 100);
+};
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    add("FOCUS_LOST", {}, "Page became hidden");
+    applyOverlay();
+    flushEvents(); // Try to flush before sleeping
+  }
+});
+
+window.addEventListener("blur", () => {
+  if (document.activeElement !== code) { // simplified check
+    add("FOCUS_LOST", {}, "Window lost focus");
+    applyOverlay();
+  }
+});
+
+document.getElementById("run").onclick = () => {
+  add("RUN", {}, "Code execution requested");
+  flushEvents();
+};
+
+document.getElementById("submit").onclick = () => {
+  add("SUBMIT", {}, "Submission requested");
+  flushEvents();
+};
+
+document.getElementById("reset").onclick = () => {
+  if (!confirm("Reset all telemetry?")) return;
+  code.value = "";
+  S.lastLen = 0;
+  S.lastPaste = false;
+  S.eventBuffer = [];
+  document.getElementById("table").innerHTML = "";
+  add("ASSESSMENT_STARTED", {}, "Session started");
+};
+
+// Start
+add("ASSESSMENT_STARTED", {}, "Session started");
+</script>
+
+</body>
+</html>
